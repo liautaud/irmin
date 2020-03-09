@@ -395,14 +395,17 @@ let bin_check (Inhabited (t, v)) =
   | Error _ -> failf "Could not deserialize binary string %s." encoded
   | Ok v' -> check_eq ~pp:(pp_value t) v v'
 
-(** Check that the value [v], of dynamic type [t], stays consistent after
-    encoding then decoding. *)
-let inhabited_check (Inhabited (t, v)) =
-  let encoded = T.to_bin_string t v in
-  match T.of_bin_string t encoded with
-  | Error _ -> failf "Could not deserialize %s." encoded
-  | Ok v' -> check_eq v v'
+(** [json_check (Inhabited (t, v))] checks that the value [v], of dynamic type
+    [t], stays consistent after JSON encoding then decoding. *)
+let json_check (Inhabited (t, v)) =
+  let irmin_t = t_to_irmin t in
+  let encoded = T.to_json_string irmin_t v in
+  match T.of_json_string irmin_t encoded with
+  | Error _ -> failf "Could not deserialize JSON string %s." encoded
+  | Ok v' -> check_eq ~pp:(pp_value t) v v'
 
 let () =
   add_test ~name:"T.of_bin_string and T.to_bin_string are mutually inverse."
     [ inhabited_gen ] bin_check;
+  add_test ~name:"T.of_json_string and T.to_json_string are mutually inverse."
+    [ inhabited_gen ] json_check
