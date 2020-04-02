@@ -10,7 +10,8 @@ let fmt = Format.sprintf
 (* This is part of the standard library as of 4.08 (see [Option.map]). *)
 let option_map f o = match o with None -> None | Some t -> Some (f t)
 
-(* This is part of the standard library as of 4.08 (see [Result.map] and [Result.map_error]). *)
+(* This is part of the standard library as of 4.08 (see [Result.map] and
+   [Result.map_error]). *)
 let result_map fa fe r =
   match r with Ok a -> Ok (fa a) | Error e -> Error (fe e)
 
@@ -45,9 +46,11 @@ type any_value =
   | VVariant of dyn_variant
   | VEnum of dyn_variant
 
-(* Since we can't use "real" records and variants to test how Irmin serializes
-   and deserializes them, we instead represent records with a hashtable of all
-   their fields, and variants as the name of the current constructor and its value. *)
+(* Since we generate random records and variants at runtime to test how Irmin
+   encodes and decomes them, we can't represent them using OCaml records and
+   variants. Instead, we represent:
+   - Records as (record_name, (field_name, field_value) Hashtbl.t).
+   - Variants as (variant_name, current_constr_name, current_constr_value). *)
 and dyn_record = (string * (string, any_value) Hashtbl.t[@opaque])
 
 and dyn_variant = string * string * any_value
