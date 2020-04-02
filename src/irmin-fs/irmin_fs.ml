@@ -160,6 +160,18 @@ struct
     | false ->
         let str = Irmin.Type.to_bin_string V.t value in
         IO.write_file ~temp_dir file str
+
+  let remove t key =
+    Log.debug (fun f -> f "remove %a" pp_key key);
+    let file = file_of_key t key in
+    let lock = lock_of_key t key in
+    IO.remove_file ~lock file
+
+  let filter t p =
+    Log.debug (fun f -> f "filter");
+    list t
+    >>= Lwt_list.iter_p @@ fun key ->
+        if p key then Lwt.return_unit else remove t key
 end
 
 module Atomic_write_ext

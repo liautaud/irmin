@@ -55,6 +55,10 @@ module Read_only (K : Irmin.Type.S) (V : Irmin.Type.S) = struct
   let mem { t; _ } key =
     Log.debug (fun f -> f "mem %a" pp_key key);
     Lwt.return (KMap.mem key t)
+
+  let list t =
+    Log.debug (fun f -> f "list");
+    KMap.fold (fun k _ acc -> k :: acc) t.t [] |> Lwt.return
 end
 
 module Append_only (K : Irmin.Type.S) (V : Irmin.Type.S) = struct
@@ -64,6 +68,21 @@ module Append_only (K : Irmin.Type.S) (V : Irmin.Type.S) = struct
     Log.debug (fun f -> f "add -> %a" pp_key key);
     t.t <- KMap.add key value t.t;
     Lwt.return_unit
+
+  let remove t key =
+    (* FIXME(liautaud): No need for locking here if we only remove
+       keys which are known to be unreachable at this point (which
+       should be the case when using garbage collection), but in
+       all generality we should be locking. *)
+    Log.debug (fun f -> f "remove %a" pp_key key);
+    t.t <- KMap.remove key t.t;
+    Lwt.return_unit
+
+  let filter t p =
+    Log.debug (fun f -> f "filter");
+    list t
+    >>= Lwt_list.iter_p @@ fun key ->
+        if p key then Lwt.return_unit else remove t key
 end
 
 module Atomic_write (K : Irmin.Type.S) (V : Irmin.Type.S) = struct
@@ -97,9 +116,7 @@ module Atomic_write (K : Irmin.Type.S) (V : Irmin.Type.S) = struct
 
   let unwatch t = W.unwatch t.w
 
-  let list t =
-    Log.debug (fun f -> f "list");
-    RO.KMap.fold (fun k _ acc -> k :: acc) t.t.RO.t [] |> Lwt.return
+  let list t = RO.list t.t
 
   let set t key value =
     Log.debug (fun f -> f "update");
