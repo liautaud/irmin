@@ -331,6 +331,64 @@ module Make (P : S.PRIVATE) = struct
         (function
           | Import_error e -> Lwt.return_error (`Msg e)
           | e -> Fmt.kstrf Lwt.fail_invalid_arg "impot error: %a" Fmt.exn e)
+
+    module KSet = Hashtbl.Make (KGraph.V)
+
+    let trace ?(entry = `Head) t =
+      (* Instead of traversing the history and node graphs one after the other,
+         we traverse the polymorphic graph at once. *)
+      let to_commit x = `Commit x in
+      let to_node x = `Node x in
+      let pred = function
+        | `Commit k -> (
+            Commit.of_hash t k >|= function
+            | None -> []
+            | Some c ->
+                let next_commits = Commit.parents c |> List.map to_commit in
+                let next_node = Commit.node c |> to_node in
+                next_node :: next_commits )
+        | `Node k -> (
+            P.Node.find (node_t t) k >|= function
+            | None -> []
+            | Some c ->
+                P.Node.Val.list c
+                |> List.map (function
+                     | _, `Node k' -> `Node k'
+                     | _, `Contents (k', _) -> `Contents (k', Metadata.default))
+            )
+        | _ -> Lwt.return []
+      in
+
+      (* Find the entry-points for the graph traversal. *)
+      (match entry with `Head -> heads t | `List m -> Lwt.return m)
+      >|= List.map (fun x -> x |> Commit.hash |> to_commit)
+      >>= fun max ->
+      (* Traverse the graph and mark the encountered objects. *)
+      let set = KSet.create 1024 in
+      let min = [] in
+      let node n =
+        KSet.add set n ();
+        Lwt.return_unit
+      in
+      let edge _ _ = Lwt.return_unit in
+      let skip _ = Lwt.return_false in
+      KGraph.iter ~pred ~min ~max ~node ~edge ~skip ~rev:false () >|= fun () ->
+      set
+
+    let cleanup ?(entry = `Head) t =
+      Log.debug (fun f ->
+          f "Starting cleanup with entry=%s."
+            ( match entry with
+            | `Head -> "heads"
+            | `List m -> string_of_int (List.length m) ));
+
+      (* Filter the stores to keep only the encountered objects. *)
+      trace ~entry t >>= fun set ->
+      P.Repo.batch t @@ fun contents_t node_t commit_t ->
+      P.Commit.filter commit_t (fun k -> KSet.mem set (`Commit k)) >>= fun () ->
+      P.Node.filter node_t (fun k -> KSet.mem set (`Node k)) >>= fun () ->
+      P.Contents.filter contents_t (fun k ->
+          KSet.mem set (`Contents (k, Metadata.default)))
   end
 
   type t = {

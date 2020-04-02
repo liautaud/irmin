@@ -152,6 +152,21 @@ module type CONTENT_ADDRESSABLE_STORE = sig
   (** Same as {!add} but allows to specify the key directly. The backend might
       choose to discared that key and/or can be corrupt if the key scheme is not
       consistent. *)
+
+  val filter : [> `Write ] t -> (key -> bool) -> unit Lwt.t
+  (** [filter t p] informs the content-addressable store that it can remove all
+      values whose key [k] does not satisfy [p].
+
+      Note that the content-adressable store is free to decide if, and when, it
+      acts on this information; so no assumptions should be made on subsequent
+      calls to [find t k] when [k] did not satisfy [p]. This also means that the
+      cost of calling [filter t p] will depend on the store implementation, so
+      it should generally be assumed to be expensive.
+
+      Note also that values whose key does not satisfy the predicate should be
+      assumed to be lost. In particular, calling [filter t p] and [filter t p']
+      successively–with [k] which satisfies [p'] but not [p]–does not
+      guarantee that the second call will "cancel" the deletion of [k]. *)
 end
 
 module type CONTENT_ADDRESSABLE_STORE_MAKER = functor
@@ -192,6 +207,21 @@ module type APPEND_ONLY_STORE = sig
 
   val add : [> `Write ] t -> key -> value -> unit Lwt.t
   (** Write the contents of a value to the store. *)
+
+  val filter : [> `Write ] t -> (key -> bool) -> unit Lwt.t
+  (** [filter t p] informs the append-only store that it can remove all values
+      whose key [k] does not satisfy [p].
+
+      Note that the append-only store is free to decide if, and when, it acts on
+      this information; so no assumptions should be made on subsequent calls to
+      [find t k] when [k] did not satisfy [p]. This also means that the cost of
+      calling [filter t p] will depend on the store implementation, so it should
+      generally be assumed to be expensive.
+
+      Note also that values whose key does not satisfy the predicate should be
+      assumed to be lost. In particular, calling [filter t p] and [filter t p']
+      successively–with [k] which satisfies [p'] but not [p]–does not
+      guarantee that the second call will "cancel" the deletion of [k]. *)
 end
 
 module type APPEND_ONLY_STORE_MAKER = functor (K : Type.S) (V : Type.S) -> sig

@@ -89,6 +89,10 @@ functor
       check_not_closed t;
       S.unsafe_add t.t k v
 
+    let filter t p =
+      check_not_closed t;
+      S.filter t.t p
+
     let batch t f =
       check_not_closed t;
       S.batch t.t (fun w -> f { t = w; closed = t.closed })

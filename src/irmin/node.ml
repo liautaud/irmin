@@ -177,6 +177,8 @@ struct
 
   let unsafe_add (_, t) = S.unsafe_add t
 
+  let filter (_, t) = S.filter t
+
   let all_contents t =
     let kvs = S.Val.list t in
     List.fold_left

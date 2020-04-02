@@ -287,6 +287,8 @@ struct
 
   let unsafe_add = S.unsafe_add
 
+  let filter = S.filter
+
   let mem = S.mem
 
   let read_opt t = function None -> Lwt.return_none | Some k -> find t k

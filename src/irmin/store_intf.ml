@@ -122,6 +122,11 @@ module type S = sig
     val import : t -> slice -> (unit, [ `Msg of string ]) result Lwt.t
     (** [import t s] imports the contents of the slice [s] in [t]. Does not
         modify branches. *)
+
+    val cleanup : ?entry:[ `Head | `List of commit list ] -> t -> unit Lwt.t
+    (** [cleanup t ~entry] traverses the store slice starting at [entry] to find
+        the commits, nodes and contents which are still in use, and deletes the
+        rest from their respective back-end stores. *)
   end
 
   val empty : repo -> t Lwt.t
