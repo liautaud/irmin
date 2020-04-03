@@ -280,10 +280,10 @@ let any_type_gen =
           const (AT TUnit);
           const (AT TBool);
           const (AT TChar);
-          (* const (AT TInt);
-             const (AT TInt32);
-             const (AT TInt64);
-             const (AT TFloat); *)
+          const (AT TInt);
+          const (AT TInt32);
+          const (AT TInt64);
+          const (AT TFloat);
           const (AT TString);
           const (AT TBytes);
           map [ at_gen ] (fun (AT t) -> AT (TList t));
@@ -298,6 +298,25 @@ let any_type_gen =
           map [ string; tags_gen ] (fun s ts -> AT (TEnum (s, ts)));
         ])
 
+(** Type of floating-point numbers with more leniant equality. *)
+let lenient_float =
+  (* FIXME(liautaud): We shouldn't have to do this in the first place.
+     The issue comes from the fact that Jsonm uses string_of_float,
+     which looses precision when the decimal part of the float exceeds
+     a certain length. We're using this fix in the meantime, but what
+     we should _really_ do is open a pull request in Jsonm. *)
+  let equal a b =
+    if Float.equal a b then true
+    else
+      let xa, na = Float.frexp a in
+      let xb, nb = Float.frexp b in
+      (na = nb && Float.abs (xa -. xb) < 1e-8) ||
+      (abs na > 700 && abs (na - nb) = 1) ||
+      (na < 700 && nb = 0) ||
+      (nb < 700 && na = 0)
+  in
+  T.like ~equal T.float
+
 (** Convert a [t] into its [Irmin.Type] counterpart. *)
 let rec t_to_irmin : type a. a t -> a T.ty = function
   | TUnit -> T.unit
@@ -306,7 +325,7 @@ let rec t_to_irmin : type a. a t -> a T.ty = function
   | TInt -> T.int
   | TInt32 -> T.int32
   | TInt64 -> T.int64
-  | TFloat -> T.float
+  | TFloat -> lenient_float
   | TString -> T.string
   | TBytes -> T.bytes
   | TList t -> T.list (t_to_irmin t)
@@ -348,14 +367,24 @@ and irmin_variant : string -> case list -> dyn_variant T.t = [%impl_variant 5]
 and irmin_enum : string -> string list -> dyn_variant T.t =
  fun n ts -> irmin_variant n (List.map (fun t -> (t, ACT Case0)) ts)
 
+(** Ensure that int values are representable as floats. *)
+let guard_int i =
+  guard (abs i <= 9_007_199_254_740_992);
+  i
+
+(** Ensure that int64 values are representable as floats. *)
+let guard_int64 i =
+  guard (Int64.abs i <= 9_007_199_254_740_992L);
+  i
+
 (** Create a generator for values of a given dynamic type. *)
 let rec t_to_value_gen : type a. a t -> a gen = function
   | TUnit -> const ()
   | TBool -> bool
   | TChar -> char
-  | TInt -> int
+  | TInt -> map [ int ] guard_int
   | TInt32 -> int32
-  | TInt64 -> int64
+  | TInt64 -> map [ int64 ] guard_int64
   | TFloat -> float
   | TString -> string
   | TBytes -> bytes
@@ -434,7 +463,10 @@ let json_check (Inhabited (t, v)) =
   match T.of_json_string irmin_t encoded with
   | Error (`Msg e) ->
       failf "Could not deserialize binary string %s.\n\nRaised: %s." encoded e
-  | Ok v' -> check_eq ~pp:(pp_value ~context t) v v'
+  (* We use the equality from Irmin.Type instead of OCaml's polymorphic equality
+     because we need floating point values to be compared using the equal function
+     defined in [leniant_float] to compensate the loss of precision. *)
+  | Ok v' -> check_eq ~eq:(T.equal irmin_t) ~pp:(pp_value ~context t) v v'
 
 let () =
   add_test ~name:"T.of_bin_string and T.to_bin_string are mutually inverse."
