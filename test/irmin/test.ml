@@ -681,4 +681,6 @@ let suite =
       ] );
   ]
 
-let () = Alcotest.run "irmin" suite
+let full_suite = suite @ Tracing.suite
+
+let () = Alcotest.run "irmin" full_suite
